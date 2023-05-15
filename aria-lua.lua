@@ -8,7 +8,7 @@
 --[[
 ###     Variables and Memory Addresses     ###
 ]]
-SETTING_REPRISE_ENABLED = false -- todo: add menu button to enable / disable Reprise stuff.
+SETTING_REPRISE = false -- todo: add menu button to enable / disable Reprise stuff.
 SETTING_DEBUG = false
 
 MODE_CHAOS = false
@@ -34,6 +34,10 @@ local active_command_timer = ACTIVE_COMMAND_DELAY
 local MIN_TIMER_INCOMING_ACTION = 60*40   -- if a new command is incoming, should only last for 40 seconds.
 local COMMAND_QUEUE_DELAY = 60*1 -- 1 seconds before an incoming command will be executed
 local command_queue_timer = COMMAND_QUEUE_DELAY
+
+local dropped_weapons = {}
+local prev_weapon = nil
+local prev_soul = nil
 
 local InputAddr = 0x001C
 local Input     -- contains bitflags for all inputs
@@ -249,8 +253,6 @@ function increase_hp_on_room_change()
     MODE_ROOMCHANGE_HEAL = true
 end
 
-local prev_weapon = nil
-local prev_soul = nil
 function chaos_mode()
     prev_weapon = memory.readbyte(Player_Current_Weapon_Addr)
     prev_soul = memory.readbyte(Player_Current_Soul_Addr)
@@ -264,7 +266,6 @@ function disable_chaos_mode()
     prev_soul = nil
 end
 
-dropped_weapons = {}
 function set_drop_weapon(enable)
     if enable then
          -- unequip
@@ -571,7 +572,7 @@ function init_command_list()
             name = '!sprint_mode'
         },
     }
-    if SETTING_REPRISE_ENABLED then
+    if SETTING_REPRISE then
         command_list['!spectral_crow']= {
             fn = set_spectral_crow,
             name = '!spectral_crow',
