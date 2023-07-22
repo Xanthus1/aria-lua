@@ -286,6 +286,10 @@ function set_drop_weapon(enable)
         memory.writebyte(Pickup_Weapon_Addr, pickup_weapon_qty)
     end
 end
+function set_MP_REFUND(enable)
+    MODE_MP_REFUND = enable
+end
+
 function swap_NES_mode()
     set_NES_mode(not MODE_NES_MOVEMENT)
 end
@@ -439,6 +443,13 @@ function set_spectral_crow(enabled)
         MODE_ROOM_MODIFIER = 0
     end
 end
+function set_dark_room(enabled)
+    if enabled then
+        MODE_ROOM_MODIFIER = 0xF
+    else
+        MODE_ROOM_MODIFIER = 0
+    end
+end
 
 
 --[[
@@ -578,6 +589,11 @@ function init_command_list()
             name = '!spectral_crow',
             reprise = true
         }
+        command_list['!dark_room']= {
+            fn = set_dark_room,
+            name = '!dark_room',
+            reprise = true
+        }
     end
 
     local dropdown_list = {'-Command-'}
@@ -623,6 +639,17 @@ function give_abilities()
     memory.writebyte(0x013354, 0x11) -- Giant Bat, Flying Armor
     memory.writebyte(0x01336E, 0x11) -- Skula, Undine
     memory.write_u32_le(0x013392, 0xFFFFFFFF) -- ability souls
+    memory.writebyte(0x013396, 0xFF) -- equip all souls
+end
+
+function give_all_items_souls()
+    ITEM_START = 0x013294
+    ITEM_END = 0x013391
+    for i=0,ITEM_END-ITEM_START do
+        -- souls take up a nibble (half byte) and will be set to one
+        -- items take up a byte, and will be set to 0x11 (17)
+        memory.writebyte(ITEM_START+i, 0x11) 
+    end
 end
 
 function clear_queue()
@@ -682,6 +709,7 @@ function init_gui()
     FORM_SPRINT_BUTTON = forms.button(XANTHUS_FORM, 'Sprint Movement Disabled', swap_SPRINT_mode, 210, 40, 150, 20)
     if SETTING_DEBUG then
         FORM_ABILITIES_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Give Abilities', give_abilities, 10, 130, 200, 20)
+        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Give Items/souls', give_all_items_souls, 210, 130, 150, 20)
         FORM_SHORTEN_CMD = forms.button(XANTHUS_FORM, 'Shorten CMD', shorten_command, 210, 100, 150, 20)
     end
     FORM_QUEUE_HEADER = forms.label(XANTHUS_FORM, 'Command Queue', 10, 160, 200, 20)
