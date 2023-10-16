@@ -75,6 +75,10 @@ local Player_MP_Addr = 0x01327C
 local Player_MPMax_Addr = 0x013280
 local Player_XP_Addr = 0x01328C --4 bytes
 local Player_Gold_Addr = 0x013290 --4 bytes
+local Player_STR_Addr = 0x013282 -- 2 bytes
+local Player_CON_Addr = 0x013284  -- 2 bytes
+local Player_INT_Addr = 0x013286  -- 2 bytes
+local Player_LCK_Addr = 0x013288  -- 2 bytes
 local Player_Animation_Addr = 0x0551
 local Player_Animation_Frame_Addr = 0x0552
 
@@ -83,7 +87,7 @@ local Prev_DoubleJumps = 0
 
 -- reprise addresses
 local Reprise_RoomModifier_Addr = 0x3F030   -- 1 byte
-
+local Reprise_RoomCounter_Addr = 0x3F004    -- 2 bytes
 --[[
 ###     Command functions     ###
 ]]
@@ -634,6 +638,9 @@ function update_gui()
     forms.settext(FORM_QUEUE_CONTENT, content)
 end
 
+function set_1HP()
+    memory.write_u16_le(Player_HP_Addr, 0x1)
+end
 function give_abilities()
     -- used for testing
     memory.writebyte(0x013354, 0x11) -- Giant Bat, Flying Armor
@@ -650,6 +657,24 @@ function give_all_items_souls()
         -- items take up a byte, and will be set to 0x11 (17)
         memory.writebyte(ITEM_START+i, 0x11) 
     end
+end
+
+function set_max_stats()
+    memory.write_u16_le(Player_HP_Addr, 3000)
+    memory.write_u16_le(Player_HPMax_Addr, 3000)
+    memory.write_u16_le(Player_MP_Addr, 3000)
+    memory.write_u16_le(Player_MPMax_Addr, 3000)
+
+    memory.write_u16_le(Player_STR_Addr, 200)
+    memory.write_u16_le(Player_CON_Addr, 200)
+    memory.write_u16_le(Player_INT_Addr, 200)
+    memory.write_u16_le(Player_LCK_Addr, 200)
+end
+
+function add_clear_room()
+    room_count = memory.read_s16_le(Reprise_RoomCounter_Addr)
+    room_count = room_count + 1
+    memory.write_s16_le(Reprise_RoomCounter_Addr, room_count)
 end
 
 function clear_queue()
@@ -708,8 +733,11 @@ function init_gui()
     FORM_RANDOM_COMMANDS_BUTTON = forms.button(XANTHUS_FORM, 'RANDOM CMDS Disabled', swap_RANDOM_COMMANDS_mode, 210, 10, 150, 20)
     FORM_SPRINT_BUTTON = forms.button(XANTHUS_FORM, 'Sprint Movement Disabled', swap_SPRINT_mode, 210, 40, 150, 20)
     if SETTING_DEBUG then
-        FORM_ABILITIES_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Give Abilities', give_abilities, 10, 130, 200, 20)
-        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Give Items/souls', give_all_items_souls, 210, 130, 150, 20)
+        FORM_ABILITIES_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) 1 HP', set_1HP, 10, 320, 200, 20)
+        FORM_ABILITIES_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Give Abilities', give_abilities, 10, 350, 200, 20)
+        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Give Items/souls', give_all_items_souls, 210, 350, 150, 20)
+        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) MaxStats', set_max_stats, 210, 370, 150, 20)
+        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) +1 Clear Room', add_clear_room, 10, 370, 150, 20)
         FORM_SHORTEN_CMD = forms.button(XANTHUS_FORM, 'Shorten CMD', shorten_command, 210, 100, 150, 20)
     end
     FORM_QUEUE_HEADER = forms.label(XANTHUS_FORM, 'Command Queue', 10, 160, 200, 20)
