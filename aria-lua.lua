@@ -8,8 +8,8 @@
 --[[
 ###     Variables and Memory Addresses     ###
 ]]
-SETTING_REPRISE = false -- todo: add menu button to enable / disable Reprise stuff.
-SETTING_DEBUG = false
+SETTING_REPRISE = true -- todo: add menu button to enable / disable Reprise stuff.
+SETTING_DEBUG = true
 
 MODE_CHAOS = false
 MODE_NES_MOVEMENT = false
@@ -85,9 +85,14 @@ local Player_Animation_Frame_Addr = 0x0552
 local DoubleJumpsAddr = 0x04F4
 local Prev_DoubleJumps = 0
 
--- reprise addresses
-local Reprise_RoomModifier_Addr = 0x3F030   -- 1 byte
-local Reprise_RoomCounter_Addr = 0x3F004    -- 2 bytes
+-- reprise RAM addresses / data
+local Reprise_RoomModifier_Addr = 0x3F030   -- 1 Byte
+local Reprise_RoomCounter_Addr = 0x3F004    -- 2 Bytes
+local Reprise_Difficulty_Addr = 0x3F009     -- 1 Byte
+local Reprise_BossCounter_Addr = 0x3f028	-- 1 Byte
+local BossFlags_Addr = 0x00037E              -- 2 Bytes.
+local Reprise_Door_BossFlag  = 0x100        -- Using 0x100 (minotaur flag) to unlock boss door in lobby
+
 --[[
 ###     Command functions     ###
 ]]
@@ -648,18 +653,40 @@ function give_abilities()
     memory.write_u32_le(0x013392, 0xFFFFFFFF) -- ability souls
     memory.writebyte(0x013396, 0xFF) -- equip all souls
 end
+function remove_abilities()
+    memory.writebyte(0x013354, 0x0) -- Giant Bat, Flying Armor
+    memory.writebyte(0x01336E, 0x0) -- Skula, Undine
+    memory.write_u32_le(0x013392, 0x0) -- ability souls
+    memory.writebyte(0x013396, 0x0) -- unequip all souls
+end
 
 function give_all_items_souls()
-    ITEM_START = 0x013294
-    ITEM_END = 0x013391
-    for i=0,ITEM_END-ITEM_START do
-        -- souls take up a nibble (half byte) and will be set to one
-        -- items take up a byte, and will be set to 0x11 (17)
-        memory.writebyte(ITEM_START+i, 0x11) 
+    FULL_RANGE = {0x01331C, 0x0013391}   -- includes the secondary duplicate lists
+    ITEMS = {0x013294, 0x01331B}
+    RED_SOULS = {0x01331C, 0x013337}
+    BLUE_SOULS = {0x013354, 0x013360}
+    YELLOW_SOULS = {0x001336E, 0x01337F}
+
+    NORMAL_RANGES = {ITEMS, RED_SOULS, BLUE_SOULS, YELLOW_SOULS}
+
+    -- clear full range
+    for i=0, FULL_RANGE[2]-FULL_RANGE[1] do
+        memory.writebyte(FULL_RANGE[1]+i, 0x0)
+    end
+
+    -- Set bytes in 'normal' ranges, excluding the secondary lists that get added to the first
+    for i=1,#NORMAL_RANGES do
+        RANGE = NORMAL_RANGES[i]
+        for j=0, RANGE[2]-RANGE[1] do
+            -- souls take up a nibble (half byte) and will be set to one
+            -- items take up a byte, and will be set to 0x11 (17)
+            memory.writebyte(RANGE[1]+j, 0x11)
+        end
     end
 end
 
 function set_max_stats()
+    -- not max, just really high
     memory.write_u16_le(Player_HP_Addr, 3000)
     memory.write_u16_le(Player_HPMax_Addr, 3000)
     memory.write_u16_le(Player_MP_Addr, 3000)
@@ -669,6 +696,32 @@ function set_max_stats()
     memory.write_u16_le(Player_CON_Addr, 200)
     memory.write_u16_le(Player_INT_Addr, 200)
     memory.write_u16_le(Player_LCK_Addr, 200)
+end
+
+function set_lvl10_stats()
+    -- per https://gamefaqs.gamespot.com/gba/589456-castlevania-aria-of-sorrow/faqs/73362
+    memory.write_u16_le(Player_HP_Addr, 428)
+    memory.write_u16_le(Player_HPMax_Addr, 428)
+    memory.write_u16_le(Player_MP_Addr, 125)
+    memory.write_u16_le(Player_MPMax_Addr, 125)
+
+    memory.write_u16_le(Player_STR_Addr, 19)
+    memory.write_u16_le(Player_CON_Addr, 21)
+    memory.write_u16_le(Player_INT_Addr, 20)
+    memory.write_u16_le(Player_LCK_Addr, 18)
+end
+
+function set_lvl27_stats()
+    -- per https://gamefaqs.gamespot.com/gba/589456-castlevania-aria-of-sorrow/faqs/73362
+    memory.write_u16_le(Player_HP_Addr, 632)
+    memory.write_u16_le(Player_HPMax_Addr, 632)
+    memory.write_u16_le(Player_MP_Addr, 267)
+    memory.write_u16_le(Player_MPMax_Addr, 267)
+
+    memory.write_u16_le(Player_STR_Addr, 53)
+    memory.write_u16_le(Player_CON_Addr, 50)
+    memory.write_u16_le(Player_INT_Addr, 50)
+    memory.write_u16_le(Player_LCK_Addr, 35)
 end
 
 function add_clear_room()
@@ -716,6 +769,27 @@ function shorten_command()
     end
     command_queue_timer = 60
 end
+function reprise_room_difficulty_set()
+    -- get value from FORM_REPRISE_ROOM and FORM_REPRISE_DIFFICULTY
+    -- set room count (which should update boss counter and unlock door if %10==0)
+    -- set difficulty
+    local new_room_count = tonumber(forms.gettext(FORM_REPRISE_ROOM))
+    local new_difficulty = tonumber(forms.gettext(FORM_REPRISE_DIFFICULTY))
+
+    memory.writebyte(Reprise_RoomCounter_Addr, new_room_count)
+    memory.writebyte(Reprise_Difficulty_Addr, new_difficulty)
+
+    -- calculate what the current boss should be and if door should be unlocked
+    local new_boss_count = math.floor(math.abs(new_room_count-1)/10)
+    memory.writebyte(Reprise_BossCounter_Addr, new_boss_count)
+
+    -- TESTING: always open boss door
+    if (new_room_count % 10 == 0 and new_room_count > 0) then
+        local boss_flags = memory.read_u16_le(BossFlags_Addr)
+        boss_flags = boss_flags | Reprise_Door_BossFlag
+        memory.write_u16_le(BossFlags_Addr, boss_flags)
+    end
+end
 function change_cmd_timer()
     local new_time = forms.gettext(FORM_CMD_LENGTH_TIME)
     ACTIVE_COMMAND_DELAY = new_time
@@ -725,7 +799,7 @@ function close_xanthus_form()
     forms.destroy(XANTHUS_FORM)
 end
 function init_gui()
-    XANTHUS_FORM = forms.newform(400,400, 'AriaLUA')
+    XANTHUS_FORM = forms.newform(400,600, 'AriaLUA')
     FORM_NES_BUTTON = forms.button(XANTHUS_FORM, 'NES Movement Disabled', swap_NES_mode, 10, 10, 200, 20)
     FORM_CHAOS_BUTTON = forms.button(XANTHUS_FORM, 'CHAOS Mode Disabled', swap_CHAOS_mode, 10, 40, 200, 20)
     FORM_HIGH_GRAV_BUTTON = forms.button(XANTHUS_FORM, 'HIGH GRAV Mode Disabled', swap_HIGH_GRAV_mode, 10, 70, 200, 20)
@@ -733,22 +807,33 @@ function init_gui()
     FORM_RANDOM_COMMANDS_BUTTON = forms.button(XANTHUS_FORM, 'RANDOM CMDS Disabled', swap_RANDOM_COMMANDS_mode, 210, 10, 150, 20)
     FORM_SPRINT_BUTTON = forms.button(XANTHUS_FORM, 'Sprint Movement Disabled', swap_SPRINT_mode, 210, 40, 150, 20)
     if SETTING_DEBUG then
-        FORM_ABILITIES_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) 1 HP', set_1HP, 10, 320, 200, 20)
         FORM_ABILITIES_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Give Abilities', give_abilities, 10, 350, 200, 20)
+        FORM_ABILITIES_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Remove Abilities', remove_abilities, 10, 370, 200, 20)
+        FORM_ABILITIES_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) 1 HP', set_1HP, 10, 390, 200, 20)
         FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Give Items/souls', give_all_items_souls, 210, 350, 150, 20)
         FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) MaxStats', set_max_stats, 210, 370, 150, 20)
-        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) +1 Clear Room', add_clear_room, 10, 370, 150, 20)
+        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Lvl 27 Stats', set_lvl27_stats, 210, 390, 150, 20)
+        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, '(Cheat) Lvl 10 Stats', set_lvl10_stats, 210, 410, 150, 20)
         FORM_SHORTEN_CMD = forms.button(XANTHUS_FORM, 'Shorten CMD', shorten_command, 210, 100, 150, 20)
+    end
+    if SETTING_REPRISE then
+        FORM_REPRISE_LABEL = forms.label(XANTHUS_FORM, '-- Reprise --', 210, 430, 150, 20)
+        FORM_ITEMSOULS_BUTTON = forms.button(XANTHUS_FORM, 'Set Room Count/Diff', reprise_room_difficulty_set, 210, 450, 150, 20)
+        FORM_REPRISE_ROOM_LABEL = forms.label(XANTHUS_FORM, 'Room Count:', 210, 470, 100, 20)
+        FORM_REPRISE_ROOM = forms.textbox(XANTHUS_FORM, '0', 50, 20, 'UNSIGNED', 320, 470)
+        FORM_REPRISE_DIFFICULTY_LABEL = forms.label(XANTHUS_FORM, 'Difficulty: ', 210, 490, 100, 20)
+        FORM_REPRISE_DIFFICULTY = forms.textbox(XANTHUS_FORM, '0', 50, 20, 'UNSIGNED', 320, 490)
     end
     FORM_QUEUE_HEADER = forms.label(XANTHUS_FORM, 'Command Queue', 10, 160, 200, 20)
     FORM_ACTIVE_TIMER_LABEL = forms.label(XANTHUS_FORM, 'Cmd Time Left: 0', 10, 180, 150, 20)
     FORM_QUEUE_CONTENT = forms.label(XANTHUS_FORM, '-- No Commands --', 10, 200, 200, 200)
     FORM_CLEAR_BUTTON = forms.button(XANTHUS_FORM, 'Clear Queue', clear_queue, 210, 160, 150, 20)
-    FORM_CMD_LENGTH_LABEL = forms.label(XANTHUS_FORM, 'Cmd Len (s):', 210, 280, 100, 20)
-    FORM_CMD_LENGTH_TIME = forms.textbox(XANTHUS_FORM, '120', 50, 20, 'UNSIGNED', 320, 280)
-    FORM_CMD_LENGTH_BUTTON = forms.button(XANTHUS_FORM, 'Update Cmd Len', change_cmd_timer, 210, 310, 100, 20)
+    FORM_CMD_LENGTH_LABEL = forms.label(XANTHUS_FORM, 'Cmd Len (s):', 210, 250, 100, 20)
+    FORM_CMD_LENGTH_TIME = forms.textbox(XANTHUS_FORM, '120', 50, 20, 'UNSIGNED', 320, 250)
+    FORM_CMD_LENGTH_BUTTON = forms.button(XANTHUS_FORM, 'Update Cmd Len', change_cmd_timer, 210, 280, 100, 20)
     FORM_CMD_ADD = forms.button(XANTHUS_FORM, 'Add', add_command, 210, 220, 50, 20)
     FORM_CMD_DROPDOWN = forms.dropdown(XANTHUS_FORM, {'-Command-'}, 270, 220, 100, 20)
+
     event.onexit(close_xanthus_form)
 end
 
