@@ -90,6 +90,7 @@ local Reprise_RoomModifier_Addr = 0x3F030   -- 1 Byte
 local Reprise_RoomCounter_Addr = 0x3F004    -- 2 Bytes
 local Reprise_Difficulty_Addr = 0x3F009     -- 1 Byte
 local Reprise_BossCounter_Addr = 0x3f028	-- 1 Byte
+local Reprise_NextBossRoomCounter_Addr =  0x3f02a -- 2 bytes.  When the next boss room will unlock
 local BossFlags_Addr = 0x00037E              -- 2 Bytes.
 local Reprise_Door_BossFlag  = 0x100        -- Using 0x100 (minotaur flag) to unlock boss door in lobby
 
@@ -783,11 +784,17 @@ function reprise_room_difficulty_set()
     local new_boss_count = math.floor(math.abs(new_room_count-1)/10)
     memory.writebyte(Reprise_BossCounter_Addr, new_boss_count)
 
-    -- TESTING: always open boss door
     if (new_room_count % 10 == 0 and new_room_count > 0) then
         local boss_flags = memory.read_u16_le(BossFlags_Addr)
         boss_flags = boss_flags | Reprise_Door_BossFlag
         memory.write_u16_le(BossFlags_Addr, boss_flags)
+
+        -- Boss room is unlocked, set current roomcount to Reprise_NextBossRoomCounter_Addr
+        memory.write_u16_le(Reprise_NextBossRoomCounter_Addr, new_room_count)
+    else
+        -- Boss room is still locked
+        next_boss_unlock_room_count = 10 * new_boss_count
+        memory.write_u16_le(Reprise_NextBossRoomCounter_Addr, next_boss_unlock_room_count)
     end
 end
 function change_cmd_timer()
