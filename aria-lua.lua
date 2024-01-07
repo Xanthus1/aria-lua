@@ -662,11 +662,14 @@ function remove_abilities()
 end
 
 function give_all_items_souls()
-    FULL_RANGE = {0x01331C, 0x0013391}   -- includes the secondary duplicate lists
-    ITEMS = {0x013294, 0x01331B}
-    RED_SOULS = {0x01331C, 0x013337}
-    BLUE_SOULS = {0x013354, 0x013360}
-    YELLOW_SOULS = {0x001336E, 0x01337F}
+    FULL_RANGE = {0x01331C, 0x0013391}   -- includes the secondary lists that get added to primary lists
+
+    -- range format: {start, end, byte to write}
+    -- primary lists
+    ITEMS = {0x013294, 0x01331B, 0x1}           -- items take up a byte
+    RED_SOULS = {0x01331C, 0x013337, 0x11}      -- souls take up a nibble (half byte)
+    BLUE_SOULS = {0x013354, 0x013360, 0x11}
+    YELLOW_SOULS = {0x001336E, 0x01337F, 0x11}
 
     NORMAL_RANGES = {ITEMS, RED_SOULS, BLUE_SOULS, YELLOW_SOULS}
 
@@ -675,13 +678,11 @@ function give_all_items_souls()
         memory.writebyte(FULL_RANGE[1]+i, 0x0)
     end
 
-    -- Set bytes in 'normal' ranges, excluding the secondary lists that get added to the first
+    -- Set bytes in 'normal' ranges, excluding the secondary lists that get added to the first list
     for i=1,#NORMAL_RANGES do
         RANGE = NORMAL_RANGES[i]
         for j=0, RANGE[2]-RANGE[1] do
-            -- souls take up a nibble (half byte) and will be set to one
-            -- items take up a byte, and will be set to 0x11 (17)
-            memory.writebyte(RANGE[1]+j, 0x11)
+            memory.writebyte(RANGE[1]+j, RANGE[3])
         end
     end
 end
