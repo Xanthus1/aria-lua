@@ -85,10 +85,13 @@ local Player_Animation_Frame_Addr = 0x0552
 local DoubleJumpsAddr = 0x04F4
 local Prev_DoubleJumps = 0
 
+local GameMode = 0x000A1           -- 0x10 set for Hard mode, 0x01 set for Julius mode.
+
 -- reprise RAM addresses / data
 local Reprise_RoomModifier_Addr = 0x3F030   -- 1 Byte
 local Reprise_RoomCounter_Addr = 0x3F004    -- 2 Bytes
 local Reprise_Difficulty_Addr = 0x3F009     -- 1 Byte
+local Reprise_DifficultyCounter_Addr = 0x3F00A	-- 1 byte
 local Reprise_BossCounter_Addr = 0x3f028	-- 1 Byte
 local Reprise_NextBossRoomCounter_Addr =  0x3f02a -- 2 bytes.  When the next boss room will unlock
 local BossFlags_Addr = 0x00037E              -- 2 Bytes.
@@ -775,11 +778,12 @@ function reprise_room_difficulty_set()
     -- get value from FORM_REPRISE_ROOM and FORM_REPRISE_DIFFICULTY
     -- set room count (which should update boss counter and unlock door if %10==0)
     -- set difficulty
+    -- set game mode
     local new_room_count = tonumber(forms.gettext(FORM_REPRISE_ROOM))
-    local new_difficulty = tonumber(forms.gettext(FORM_REPRISE_DIFFICULTY))
+    local new_difficulty_counter = tonumber(forms.gettext(FORM_REPRISE_DIFFICULTY))
 
     memory.writebyte(Reprise_RoomCounter_Addr, new_room_count)
-    memory.writebyte(Reprise_Difficulty_Addr, new_difficulty)
+    memory.writebyte(Reprise_DifficultyCounter_Addr, new_difficulty_counter)
 
     -- calculate what the current boss should be and if door should be unlocked
     local new_boss_count = math.floor(math.abs(new_room_count-1)/10)
@@ -797,6 +801,32 @@ function reprise_room_difficulty_set()
         next_boss_unlock_room_count = 10 * new_boss_count
         memory.write_u16_le(Reprise_NextBossRoomCounter_Addr, next_boss_unlock_room_count)
     end
+
+    -- update game mode difficulty based on dropdown (for Reprisev1.0+)
+    local game_mode = forms.gettext(FORM_REPRISE_MODE_DROPDOWN)
+    console.log(game_mode)
+    if game_mode == 'Easy' then
+        memory.writebyte(Reprise_Difficulty_Addr, 0x0)
+        local game_mode = memory.readbyte(GameMode)
+        game_mode = game_mode & 0x0F     -- remove Hard mode bit
+        memory.writebyte(GameMode, game_mode)
+    elseif game_mode == 'Normal' then
+        memory.writebyte(Reprise_Difficulty_Addr, 0x1)
+        local game_mode = memory.readbyte(GameMode)
+        game_mode = game_mode & 0x0F     -- remove Hard mode bit
+        memory.writebyte(GameMode, game_mode)
+    elseif game_mode == 'Hard' then
+        memory.writebyte(Reprise_Difficulty_Addr, 0x2)
+        local game_mode = memory.readbyte(GameMode)
+        game_mode = game_mode & 0x0F     -- remove Hard mode bit
+        memory.writebyte(GameMode, game_mode)
+    elseif game_mode == 'Nightmare' then
+        memory.writebyte(Reprise_Difficulty_Addr, 0x3)
+        local game_mode = memory.readbyte(GameMode)
+        game_mode = game_mode | 0x10     -- add Hard mode bit
+        memory.writebyte(GameMode, game_mode)
+    end
+
 end
 function change_cmd_timer()
     local new_time = forms.gettext(FORM_CMD_LENGTH_TIME)
@@ -831,6 +861,9 @@ function init_gui()
         FORM_REPRISE_ROOM = forms.textbox(XANTHUS_FORM, '0', 50, 20, 'UNSIGNED', 320, 470)
         FORM_REPRISE_DIFFICULTY_LABEL = forms.label(XANTHUS_FORM, 'Difficulty: ', 210, 490, 100, 20)
         FORM_REPRISE_DIFFICULTY = forms.textbox(XANTHUS_FORM, '0', 50, 20, 'UNSIGNED', 320, 490)
+        FORM_REPRISE_MODE_DROPDOWN = forms.dropdown(XANTHUS_FORM, {'-Command-'}, 210, 510, 100, 20)
+        modes = {'Easy', 'Normal', 'Hard', 'Nightmare'}
+        forms.setdropdownitems(FORM_REPRISE_MODE_DROPDOWN, modes)
     end
     FORM_QUEUE_HEADER = forms.label(XANTHUS_FORM, 'Command Queue', 10, 160, 200, 20)
     FORM_ACTIVE_TIMER_LABEL = forms.label(XANTHUS_FORM, 'Cmd Time Left: 0', 10, 180, 150, 20)
